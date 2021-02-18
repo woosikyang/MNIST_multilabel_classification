@@ -1,23 +1,125 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.model_selection import KFold
+import cv2
 from tqdm import tqdm
+import imutils
+import zipfile
+import os
+from PIL import Image
 
-from torch.utils.data import DataLoader
-from model import *
-from utils import *
-import config
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torchvision.models as models
+import torchvision.transforms as T
+from torch.utils.data import DataLoader, Dataset
+
+
+device = torch.device('cuda:0')
+
+#dataset
+dirty_mnist_answer = pd.read_csv("data/dirty_mnist_2nd_answer.csv")
+# dirty_mnist라는 디렉터리 속에 들어있는 파일들의 이름을
+# namelist라는 변수에 저장
+namelist = os.listdir('./data/dirty_mnist_2nd/')
+
+
+# unmpy를 tensor로 변환하는 ToTensor 정의
+class ToTensor(object):
+    """numpy array를 tensor(torch)로 변환합니다."""
+
+    def __call__(self, sample):
+        image, label = sample['image'], sample['label']
+        # swap color axis because
+        # numpy image: H x W x C
+        # torch image: C X H X W
+        image = image.transpose((2, 0, 1))
+        return {'image': torch.FloatTensor(image),
+                'label': torch.FloatTensor(label)}
+
+
+# to_tensor 선언
+to_tensor = T.Compose([
+    ToTensor()
+])
+
+
+class DatasetMNIST(torch.utils.data.Dataset):
+    def __init__(self,
+                 dir_path,
+                 meta_df,
+                 transforms=to_tensor,  # 미리 선언한 to_tensor를 transforms로 받음
+                 augmentations=None):
+        self.dir_path = dir_path  # 데이터의 이미지가 저장된 디렉터리 경로
+        self.meta_df = meta_df  # 데이터의 인덱스와 정답지가 들어있는 DataFrame
+
+        self.transforms = transforms  # Transform
+        self.augmentations = augmentations  # Augmentation
+
+    def __len__(self):
+        return len(self.meta_df)
+
+    def __getitem__(self, index):
+        # 폴더 경로 + 이미지 이름 + .png => 파일의 경로
+        # 참고) "12".zfill(5) => 000012
+        #       "146".zfill(5) => 000145
+        # cv2.IMREAD_GRAYSCALE : png파일을 채널이 1개인 GRAYSCALE로 읽음
+        image = cv2.imread(self.dir_path + \
+                           str(self.meta_df.iloc[index, 0]).zfill(5) + '.png',
+                           cv2.IMREAD_GRAYSCALE)
+        # 0 ~ 255의 값을 갖고 크기가 (256,256)인 numpy array를
+        # 0 ~ 1 사이의 실수를 갖고 크기가 (256,256,1)인 numpy array로 변환
+        image = (image / 255).astype('float')[..., np.newaxis]
+
+        # 정답 numpy array생성(존재하면 1 없으면 0)
+        label = self.meta_df.iloc[index, 1:].values.astype('float')
+        sample = {'image': image, 'label': label}
+
+        # transform 적용
+        # numpy to tensor
+        if self.transforms:
+            sample = self.transforms(sample)
+
+        # sample 반환
+        return sample
+'''  
+model
+'''
+# nn.Module을 상속 받아 MultiLabelResnet를 정의
+class MultiLabelResnet(nn.Module):
+    def __init__(self):
+        super(MultiLabelResnet, self).__init__()
+        self.conv2d = nn.Conv2d(1, 3, 3, stride=1)
+        self.resnet = models.resnet18()
+        self.FC = nn.Linear(1000, 26)
+
+    def forward(self, x):
+        # resnet의 입력은 [3, N, N]으로
+        # 3개의 채널을 갖기 때문에
+        # resnet 입력 전에 conv2d를 한 층 추가
+        x = F.relu(self.conv2d(x))
+
+        # resnet18을 추가
+        x = F.relu(self.resnet(x))
+
+        # 마지막 출력에 nn.Linear를 추가
+        # multilabel을 예측해야 하기 때문에
+        # softmax가 아닌 sigmoid를 적용
+        x = torch.sigmoid(self.FC(x))
+        return x
+# 모델 선언
+model = MultiLabelResnet()
+model
 
 
 '''  
 train
 '''
-device = torch.device('cuda:0')
-
-#dataset
-dirty_mnist_answer = pd.read_csv(config.train_data_answer_path)
-
 # cross validation을 적용하기 위해 KFold 생성
+from sklearn.model_selection import KFold
+
 kfold = KFold(n_splits=5, shuffle=True, random_state=0)
 
 # dirty_mnist_answer에서 train_idx와 val_idx를 생성
@@ -32,18 +134,18 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
     test_answer = dirty_mnist_answer.iloc[val_idx]
 
     # Dataset 정의
-    train_dataset = DatasetMNIST(config.train_data_path, train_answer)
-    valid_dataset = DatasetMNIST(config.train_data_path, test_answer)
+    train_dataset = DatasetMNIST("data/dirty_mnist_2nd/", train_answer)
+    valid_dataset = DatasetMNIST("data/dirty_mnist_2nd/", test_answer)
     # DataLoader 정의
     train_data_loader = DataLoader(
         train_dataset,
-        batch_size=config.train_batch_size,
+        batch_size=128,
         shuffle=False,
         num_workers=0
     )
     valid_data_loader = DataLoader(
         valid_dataset,
-        batch_size=config.valid_batch_size,
+        batch_size=32,
         shuffle=False,
         num_workers=0
     )
@@ -145,8 +247,10 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
         if valid_acc_max < valid_acc:
             valid_acc_max = valid_acc
             best_model = model
+            MODEL = "resnet18"
             # 모델을 저장할 구글 드라이브 경로
-            torch.save(best_model, f'{config.model_path}{fold_index}_{config.model_name}_{valid_loss.item():2.4f}_epoch_{epoch}.pth')
+            path = "models/"
+            torch.save(best_model, f'{path}{fold_index}_{MODEL}_{valid_loss.item():2.4f}_epoch_{epoch}.pth')
 
     # 폴드별로 가장 좋은 모델 저장
     best_models.append(best_model)
@@ -154,14 +258,14 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
 
 
 '''
-result analysis
+result
 '''
 # gpu에 올라가 있는 tensor -> cpu로 이동 -> numpy array로 변환
 sample_images = images.cpu().detach().numpy()
 sample_prob = probs
 sample_labels = labels
 
-idx = 3
+idx = 1
 plt.imshow(sample_images[idx][0])
 plt.title("sample input image")
 plt.show()
@@ -174,24 +278,26 @@ print('정답값 : ', dirty_mnist_answer.columns[1:][sample_labels[idx] > 0.5])
 ensemble
 '''
 #test Dataset 정의
-sample_submission = pd.read_csv(config.test_data_answer_path)
-test_dataset = DatasetMNIST(config.test_data_path, sample_submission)
-
-
+sample_submission = pd.read_csv("data/sample_submission.csv")
+test_dataset = DatasetMNIST("data/test_dirty_mnist_2nd/", sample_submission)
+batch_size = 128
 test_data_loader = DataLoader(
     test_dataset,
-    batch_size = config.test_batch_size,
+    batch_size = batch_size,
     shuffle = False,
     num_workers = 0,
     drop_last = False
 )
 
 predictions_list = []
+# 배치 단위로 추론
+prediction_df = pd.read_csv("data/sample_submission.csv")
+
 # 5개의 fold마다 가장 좋은 모델을 이용하여 예측
 for model in best_models:
     # 0으로 채워진 array 생성
-    prediction_array = np.zeros([sample_submission.shape[0],
-                                 sample_submission.shape[1] - 1])
+    prediction_array = np.zeros([prediction_df.shape[0],
+                                 prediction_df.shape[1] - 1])
     for idx, sample in enumerate(test_data_loader):
         with torch.no_grad():
             # 추론
@@ -204,7 +310,7 @@ for model in best_models:
 
             # 예측 결과를
             # prediction_array에 입력
-            batch_index = config.test_batch_size * idx
+            batch_index = batch_size * idx
             prediction_array[batch_index: batch_index + images.shape[0], :] \
                 = preds.astype(int)
 
@@ -217,6 +323,14 @@ predictions_mean = predictions_array.mean(axis = 2)
 
 # 평균 값이 0.5보다 클 경우 1 작으면 0
 predictions_mean = (predictions_mean > 0.5) * 1
-# 결과파일 만들기
+predictions_mean
+
+
+
+'''
+export result
+'''
+sample_submission = pd.read_csv("data/sample_submission.csv")
 sample_submission.iloc[:,1:] = predictions_mean
-sample_submission.to_csv(config.result_name, index = False)
+sample_submission.to_csv("result/baseline_prediction.csv", index = False)
+sample_submission
