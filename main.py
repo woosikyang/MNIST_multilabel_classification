@@ -2,7 +2,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
 from tqdm import tqdm
-
 from torch.utils.data import DataLoader
 from model import *
 from utils import *
@@ -49,7 +48,8 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
     )
 
     # 모델 선언
-    model = MultiLabelResnet()
+    #model = MultiLabelResnet()
+    model = Wide_resnet_Resnet()
     model.to(device)  # gpu에 모델 할당
 
     # 훈련 옵션 설정
@@ -72,8 +72,6 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
             for sample in train_bar:
                 train_bar.set_description(f"Train Epoch {epoch}")
                 # 갱신할 변수들에 대한 모든 변화도를 0으로 초기화
-                # 참고)https://tutorials.pytorch.kr/beginner/pytorch_with_examples.html
-
                 optimizer.zero_grad()
                 images, labels = sample['image'], sample['label']
                 # tensor를 gpu에 올리기
@@ -157,18 +155,19 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
 result analysis
 '''
 # gpu에 올라가 있는 tensor -> cpu로 이동 -> numpy array로 변환
-sample_images = images.cpu().detach().numpy()
-sample_prob = probs
-sample_labels = labels
 
-idx = 3
-plt.imshow(sample_images[idx][0])
-plt.title("sample input image")
-plt.show()
-
-print('예측값 : ',dirty_mnist_answer.columns[1:][sample_prob[idx] > 0.5])
-print('정답값 : ', dirty_mnist_answer.columns[1:][sample_labels[idx] > 0.5])
-
+def result_analysis(dirty_mnist_answer,
+                    images,
+                    sample_prob,
+                    sample_labels,
+                    idx) :
+    sample_images = images.cpu().detach().numpy()
+    plt.imshow(sample_images[idx][0])
+    plt.title("sample input image")
+    plt.show()
+    print('예측값 : ',dirty_mnist_answer.columns[1:][sample_prob[idx] > 0.5])
+    print('정답값 : ', dirty_mnist_answer.columns[1:][sample_labels[idx] > 0.5])
+    plt.close()
 
 '''
 ensemble

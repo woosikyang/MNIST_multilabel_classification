@@ -1,10 +1,10 @@
 model_path = 'models/'
-model_name = 'resnet18'
+model_name = 'wide_resnet101_2'
 train_data_path = "data/dirty_mnist_2nd/"
 train_data_answer_path = "data/dirty_mnist_2nd_answer.csv"
 test_data_path = "data/test_dirty_mnist_2nd/"
 test_data_answer_path = "data/sample_submission.csv"
 result_name = "result/baseline_prediction.csv"
-train_batch_size = 128
-valid_batch_size = 32
-test_batch_size = 128
+train_batch_size = 16
+valid_batch_size = 16
+test_batch_size = 16
