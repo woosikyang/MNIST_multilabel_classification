@@ -21,7 +21,6 @@ dirty_mnist_answer = pd.read_csv(config.train_data_answer_path)
 kfold = KFold(n_splits=5, shuffle=True, random_state=0)
 
 # dirty_mnist_answer에서 train_idx와 val_idx를 생성
-best_models = []  # 폴드별로 가장 validation acc가 높은 모델 저장
 for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer), 1):
     print(f'[fold: {fold_index}]')
     # cuda cache clear
@@ -65,7 +64,7 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
 
     # 훈련 시작
     valid_acc_max = 0
-    for epoch in range(5):
+    for epoch in range(15):
         # 1개 epoch 훈련
         train_acc_list = []
         with tqdm(train_data_loader,  # train_data_loader를 iterative하게 반환
@@ -150,7 +149,7 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
             torch.save(best_model, f'{config.model_path}{fold_index}_{config.model_name}_{valid_loss.item():2.4f}_epoch_{epoch}.pth')
 
     # 폴드별로 가장 좋은 모델 저장
-    best_models.append(best_model)
+    torch.save(best_model, f'{config.model_path}Best_{fold_index}_{config.model_name}_{valid_loss.item():2.4f}_epoch_{epoch}.pth')
     del model, best_model, images, labels, probs
 
 '''
@@ -189,6 +188,10 @@ test_data_loader = DataLoader(
 
 predictions_list = []
 # 5개의 fold마다 가장 좋은 모델을 이용하여 예측
+
+# LOAD Best_models
+
+
 for model in best_models:
     # 0으로 채워진 array 생성
     prediction_array = np.zeros([sample_submission.shape[0],
