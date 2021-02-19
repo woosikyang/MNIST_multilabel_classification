@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from model import *
 from utils import *
 import config
+import gc
 
 
 '''  
@@ -23,7 +24,9 @@ kfold = KFold(n_splits=5, shuffle=True, random_state=0)
 best_models = []  # 폴드별로 가장 validation acc가 높은 모델 저장
 for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer), 1):
     print(f'[fold: {fold_index}]')
-    # cuda cache 초기화
+    # cuda cache clear
+
+    gc.collect()
     torch.cuda.empty_cache()
 
     # train fold, validation fold 분할
@@ -62,7 +65,7 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
 
     # 훈련 시작
     valid_acc_max = 0
-    for epoch in range(10):
+    for epoch in range(5):
         # 1개 epoch 훈련
         train_acc_list = []
         with tqdm(train_data_loader,  # train_data_loader를 iterative하게 반환
@@ -148,8 +151,7 @@ for fold_index, (trn_idx, val_idx) in enumerate(kfold.split(dirty_mnist_answer),
 
     # 폴드별로 가장 좋은 모델 저장
     best_models.append(best_model)
-
-
+    del model, best_model, images, labels, probs
 
 '''
 result analysis
