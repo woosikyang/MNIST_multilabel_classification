@@ -190,16 +190,22 @@ predictions_list = []
 # 5개의 fold마다 가장 좋은 모델을 이용하여 예측
 
 # LOAD Best_models
+model = Wide_resnet_Resnet()
+model.to(device)  # gpu에 모델 할당
 
 
-for model in best_models:
+best_models = ['models/Best_2_wide_resnet101_2_0.7065_epoch_1.pth']
+
+for model_ in best_models:
     # 0으로 채워진 array 생성
     prediction_array = np.zeros([sample_submission.shape[0],
                                  sample_submission.shape[1] - 1])
     for idx, sample in enumerate(test_data_loader):
         with torch.no_grad():
             # 추론
+            model = torch.load(model_)
             model.eval()
+
             images = sample['image']
             images = images.to(device)
             probs = model(images)
