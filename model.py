@@ -49,3 +49,12 @@ class Wide_resnet_Resnet(nn.Module):
         # softmax가 아닌 sigmoid를 적용
         x = torch.sigmoid(self.FC(x))
         return x
+
+class OCR_based_approach(nn.Module) :
+    def __init__(self):
+        super(OCR_based_approach, self).__init__()
+    
+
+    def forward(self,x):
+
+        return x

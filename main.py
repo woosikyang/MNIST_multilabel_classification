@@ -194,7 +194,10 @@ model = Wide_resnet_Resnet()
 model.to(device)  # gpu에 모델 할당
 
 
-best_models = ['models/Best_2_wide_resnet101_2_0.7065_epoch_1.pth']
+best_models = ['models/Best_3_wide_resnet101_2_0.6659_epoch_14.pth',
+               'models/Best_1_wide_resnet101_2_0.6990_epoch_4.pth',
+               'models/Best_1_wide_resnet101_2_0.6959_epoch_1.pth',
+               'models/Best_2_wide_resnet101_2_0.7065_epoch_1.pth']
 
 for model_ in best_models:
     # 0으로 채워진 array 생성
@@ -229,4 +232,5 @@ predictions_mean = predictions_array.mean(axis = 2)
 predictions_mean = (predictions_mean > 0.5) * 1
 # 결과파일 만들기
 sample_submission.iloc[:,1:] = predictions_mean
-sample_submission.to_csv(config.result_name, index = False)
+result_name = 'result/Wide_resnet_Resnet_prediction.csv'
+sample_submission.to_csv(result_name, index = False)
